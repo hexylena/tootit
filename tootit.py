@@ -1,10 +1,229 @@
 #!/usr/bin/env python
 
-# Mastodon.media_post(media_file, mime_type=None, description=None, focus=None, file_name=None, thumbnail=None, thumbnail_mime_type=None, synchronous=False)[source]
-# Post an image, video or audio file. media_file can either be data or a file name. If data is passed directly, the mime type has to be specified manually, otherwise, it is determined from the file name. focus should be a tuple of floats between -1 and 1, giving the x and y coordinates of the images focus point for cropping (with the origin being the images center).
+# Identify posts that should be posted
+import requests
+from mastodon import Mastodon
+import subprocess
+import time
+import base64
+import os
+import glob
+import re
+import yaml
+import copy
+import datetime
+import pytz
 
-#  Mastodon.status_post(status, in_reply_to_id=None, media_ids=None, sensitive=False, visibility=None, spoiler_text=None, language=None, idempotency_key=None, content_type=None, scheduled_at=None, poll=None, quote_id=None)[source]
-# The sensitive boolean decides whether or not media attached to the post should be marked as sensitive, which hides it by default on the Mastodon web front-end. 
+from dataclasses import dataclass
+from typing import Optional
 
-# Mastodon.make_poll(options, expires_in, multiple=False, hide_totals=False)[source]
-# Generate a poll object that can be passed as the poll option when posting a status. options is an array of strings with the poll options (Maximum, by default: 4), expires_in is the time in seconds for which the poll should be open. Set multiple to True to allow people to choose more than one answer. Set hide_totals to True to hide the results of the poll until it has expired.
+TOOT_LENGTH = 500
+ACCESS_TOKEN = 'q9Z_ed37jjn7FBfZ0tk27uL8q6z0HpPPGfgQVr6nI1Y'
+SERVER = 'mastodon.social'
+
+@dataclass
+class Poll:
+    options: list[str]
+
+
+@dataclass
+class Image:
+    url: str
+    alt: str
+    remote: bool
+    path: str = None
+    REGEX = "!\[(?P<alt>.*)\]\((?P<url>.*)\)"
+
+    @classmethod
+    def from_match(cls, match):
+        url = match.group('url')
+        alt = match.group('alt')
+        return cls(url=url, alt=alt, remote=bool(re.findall('https?://', url)))
+
+    @classmethod
+    def from_text(cls, text):
+        return cls.from_match(re.match(cls.REGEX, text))
+
+    def file_path(self):
+        if self.remote:
+            # Caches the image in our tmp path (mostly for testing.)
+            path_hash = base64.b32encode(self.url.encode('utf-8')).decode('utf-8')
+            tmpfile = os.path.join('/tmp', path_hash)
+
+            if not os.path.exists(tmpfile):
+                print(f"Downloading {url=}")
+                results = requests.get(self.url)
+                with open(tmpfile, 'wb') as f:
+                    f.write(results.content)
+
+            self.path = tmpfile
+        else:
+            self.path = self.url
+
+        return self.path
+
+    def mime_type(self):
+        p = self.file_path()
+        file_output = subprocess.check_output(['file', p, '--mime']).decode('utf-8')
+        return file_output.split(':')[1].split(';')[0].strip()
+
+@dataclass
+class Album:
+    images: list[Image]
+
+    def path_and_mime(self):
+        return [
+            (i.file_path(), i.mime_type())
+            for i in self.images
+        ]
+
+    def upload(self, masto, are_you_sure=False):
+        if are_you_sure:
+            # Mastodon.media_post(media_file, mime_type=None, description=None, focus=None, file_name=None, thumbnail=None, thumbnail_mime_type=None, synchronous=False)[source]
+            # Post an image, video or audio file. media_file can either be data or a file name. If data is passed directly, the mime type has to be specified manually, otherwise, it is determined from the file name. focus should be a tuple of floats between -1 and 1, giving the x and y coordinates of the images focus point for cropping (with the origin being the images center).
+
+            return [
+                masto.media_post(media_file=i.file_path(), mime_type=i.mime_type(), description=i.alt)
+                for i in self.images
+            ]
+        else:
+            print([
+                f"masto.media_post(media_file={i.file_path()}, mime_type={i.mime_type()}, description={i.alt})"
+                for i in self.images
+            ])
+
+
+@dataclass
+class Toot:
+    """A class representing a markdown toot"""
+    contents: list[str]
+    language: str = "en"
+    date: str = None
+    cw: str = None
+    visibility: str = "public" # One of "direct", "private", "public"
+
+    @classmethod
+    def from_text(cls, data):
+        if '---\n' in data:
+            meta = yaml.safe_load(data.split('---')[1])
+            data = data.split('---')[2].strip().split('\n\n')
+        else:
+            meta = {}
+            data = data.strip().split('\n\n')
+
+        return cls(contents=data, **meta)
+
+    def calculate_length(self, para):
+        return len(self.cw if self.cw else "") + sum(len(p) for p in para if type(p) == str) # TODO: URLs count as 33 chars or some nonsense.
+
+    @classmethod
+    def looks_like_images(cls, para):
+        return all(x.startswith('![') for x in para.split('\n'))
+
+    @classmethod
+    def looks_like_poll(cls, para):
+        return all(x.startswith('- [ ] ') for x in para.split('\n'))
+
+    def convert_content(self, contents):
+        if self.looks_like_images(contents):
+            return Album(images=[Image.from_text(i) for i in contents.split('\n')])
+        elif self.looks_like_poll(contents):
+            return Poll(options=[i[6:] for i in contents.split('\n')])
+        else:
+            return contents
+
+    @classmethod
+    def textonly(cls, contents):
+        return '\n\n'.join([
+            x for x in contents
+            if isinstance(x, str)
+        ])
+
+    def split_contents(self):
+        current = []
+        remaining_contents = copy.copy(self.contents)
+        while True:
+            # End of contents.
+            if len(remaining_contents) == 0:
+                if len(current) > 0:
+                    yield current
+                break
+
+            # If adding a new paragraph would go over the max char length
+            too_long = self.calculate_length(current + [self.convert_content(remaining_contents[0])]) > TOOT_LENGTH
+            too_much_media = any(isinstance(x, Album) for x in current) and isinstance(self.convert_content(remaining_contents[0]), Album)
+            too_many_polls = any(isinstance(x, Poll) for x in current) and isinstance(self.convert_content(remaining_contents[0]), Poll)
+
+            if too_long or too_much_media or too_many_polls:
+                yield current
+                current = [self.convert_content(remaining_contents.pop(0))]
+            else:
+                current.append(self.convert_content(remaining_contents.pop(0)))
+
+def parseToot(fn):
+    print(f"Parsing {fn}")
+    with open(fn, 'r') as handle:
+        data = handle.read()
+        return Toot.from_text(data)
+
+mastodon = Mastodon(
+    api_base_url=SERVER,
+    access_token=os.environ['FEDI_ACCESS_TOKEN']
+)
+
+def sendToot(toot):
+    in_reply_to_id = None
+    for post in toot.split_contents():
+        print('=====')
+        if toot.cw:
+            print(f"CW: {toot.cw}")
+
+        media = [x for x in post if isinstance(x, Album)]
+        poll = [x for x in post if isinstance(x, Poll)]
+
+        media_ids = None
+
+        if media:
+            album = media[0]
+            print("MEDIA", album)
+            print(album.path_and_mime())
+            media_ids = album.upload(mastodon, True)
+
+        #if any(isinstance(x, Poll) for x in post):
+        #    print("POLL")
+        # TODO: poll lifetime
+        # TODO: poll multiple
+
+        text = Toot.textonly(post)
+        print(f"PREPARING TOOT {in_reply_to_id=} {text=}")
+
+        response = mastodon.status_post(text, in_reply_to_id=in_reply_to_id, media_ids=media_ids, sensitive=False, spoiler_text=toot.cw, language=toot.language, visibility=toot.visibility, poll=None)
+        in_reply_to_id = response['id']
+        print(f"SENT TOOT id={in_reply_to_id}")
+        time.sleep(5)
+
+        # TODO: support sensitive-media?
+        # TODO: idempotency_key
+
+def gitMvToot(fn):
+    subprocess.check_call([
+        'git', 'mv'
+        fn,
+        fn.replace('inbox', 'outbox')
+    ])
+
+for fn in glob.glob("inbox/*"):
+    toot = parseToot(fn)
+
+    # If there's no date, send now
+    if not toot.date:
+        sendToot(toot)
+        gitMvToot(fn)
+
+    # Otherwise, check if we're past that date.
+    now = datetime.datetime.now(tz=pytz.UTC)
+    if toot.date < now:
+        sendToot(toot)
+        gitMvToot(fn)
+
+    # Otherwise we can ignore it for now.
