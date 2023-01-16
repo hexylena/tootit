@@ -101,6 +101,7 @@ class Toot:
     date: str = None
     cw: str = None
     visibility: str = "public" # One of "direct", "private", "public"
+    auto_thread_emoji: bool = True
 
     @classmethod
     def from_text(cls, data):
@@ -140,6 +141,17 @@ class Toot:
         ])
 
     def split_contents(self):
+        contents = list(self._split_contents())
+
+        if self.auto_thread_emoji and len(contents) > 1:
+            for idx, toot in enumerate(contents):
+                if self.calculate_length(toot) < TOOT_LENGTH - 6:
+                    toot.append(f"\n{idx + 1}/{len(contents)}")
+                yield toot
+        else:
+            yield from contents
+
+    def _split_contents(self):
         current = []
         remaining_contents = copy.copy(self.contents)
         while True:
@@ -206,10 +218,14 @@ def sendToot(toot):
         # TODO: idempotency_key
 
 def gitMvToot(fn):
+    files = subprocess.check_output(['git', 'ls-files']).decode('utf-8').split('\n')
+    if fn not in files:
+        # File not tracked by git, probably a dev testing locally.
+        return None
+
     subprocess.check_call([
-        'git', 'mv'
-        fn,
-        fn.replace('inbox', 'outbox')
+        'git', 'mv',
+        fn, fn.replace('inbox', 'outbox')
     ])
 
 for fn in glob.glob("inbox/*"):
