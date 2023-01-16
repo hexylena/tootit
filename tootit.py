@@ -214,7 +214,7 @@ def sendToot(toot):
         print(f"SENT TOOT id={in_reply_to_id}")
         time.sleep(5)
 
-        # TODO: support sensitive-media?
+        # TODO: support sensitive-media? (well it's handled automatically by CW'ing the post, so, maybe not necessary.)
         # TODO: idempotency_key
 
 def gitMvToot(fn):
