@@ -223,6 +223,9 @@ def gitMvToot(fn):
         # File not tracked by git, probably a dev testing locally.
         return None
 
+    # Create an outbox if it doesn't exist.
+    os.makedirs("outbox", exist_ok=True)
+
     subprocess.check_call([
         'git', 'mv',
         fn, fn.replace('inbox', 'outbox')
