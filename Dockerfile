@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM python:3.11-slim
 # Copies your code file from your action repository to the filesystem path `/` of the container
 COPY tootit.py /tootit.py
 COPY requirements.txt /requirements.txt
