@@ -100,7 +100,7 @@ class Toot:
     language: str = "en"
     date: str = None
     cw: str = None
-    visibility: str = "private" # One of "direct", "private", "public"
+    visibility: str = "private" # One of "direct", "private", "public", "unlisted"
     auto_thread_emoji: bool = True
 
     @classmethod
@@ -178,7 +178,7 @@ def parseToot(fn):
         data = handle.read()
         return Toot.from_text(data)
 
-def sendToot(toot, mastodon):
+def sendToot(toot, mastodon, visibility=None):
     in_reply_to_id = None
     for post in toot.split_contents():
         print('=====')
@@ -204,7 +204,15 @@ def sendToot(toot, mastodon):
         text = Toot.textonly(post)
         print(f"PREPARING TOOT {in_reply_to_id=} {text=}")
 
-        response = mastodon.status_post(text, in_reply_to_id=in_reply_to_id, media_ids=media_ids, sensitive=False, spoiler_text=toot.cw, language=toot.language, visibility=toot.visibility, poll=None)
+        viz = None
+        if visibility is not None:
+            viz = visibility
+        else:
+            viz = toot.visibility
+            if in_reply_to_id is not None:
+                viz = 'unlisted'
+
+        response = mastodon.status_post(text, in_reply_to_id=in_reply_to_id, media_ids=media_ids, sensitive=False, spoiler_text=toot.cw, language=toot.language, visibility=viz, poll=None)
         in_reply_to_id = response['id']
         print(f"SENT TOOT id={in_reply_to_id}")
         time.sleep(5)
@@ -234,7 +242,7 @@ if __name__ == '__main__':
     parser.add_argument('token', default=os.environ.get('FEDI_ACCESS_TOKEN', ''))
     parser.add_argument('file', nargs='*', help="toot a specific md, if specified, rather than discovering from the inbox")
     parser.add_argument('--toot-length', default=500, type=int)
-    #parser.add_argument('--visibility', default='private', choices=['public', 'private'], type=str, help="Only really relevant when tooting from md.")
+    parser.add_argument('--visibility', default='private', choices=['public', 'private'], type=str, help="Only really relevant when tooting from md.")
     args = parser.parse_args()
 
     TOOT_LENGTH = args.toot_length
@@ -246,22 +254,22 @@ if __name__ == '__main__':
 
     files = []
     if len(args.file) > 0:
-        files = args.file
+        for fn in args.file:
+            toot = parseToot(fn)
+            sendToot(toot, mastodon, visibility=args.visibility)
     else:
-        files = glob.glob(os.path.join(args.inbox, '*'))
+        for fn in glob.glob(os.path.join(args.inbox, '*')):
+            toot = parseToot(fn)
 
-    for fn in files:
-        toot = parseToot(fn)
+            # If there's no date, send now
+            if not toot.date:
+                sendToot(toot, mastodon)
+                gitMvToot(fn, args)
 
-        # If there's no date, send now
-        if not toot.date:
-            sendToot(toot, mastodon)
-            gitMvToot(fn, args)
+            # Otherwise, check if we're past that date.
+            now = datetime.datetime.now(tz=pytz.UTC)
+            if toot.date < now:
+                sendToot(toot, mastodon)
+                gitMvToot(fn, args)
 
-        # Otherwise, check if we're past that date.
-        now = datetime.datetime.now(tz=pytz.UTC)
-        if toot.date < now:
-            sendToot(toot, mastodon)
-            gitMvToot(fn, args)
-
-        # Otherwise we can ignore it for now.
+            # Otherwise we can ignore it for now.
