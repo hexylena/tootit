@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 # Identify posts that should be posted
+import argparse
 import requests
 from mastodon import Mastodon
 import subprocess
@@ -17,9 +18,8 @@ import pytz
 from dataclasses import dataclass
 from typing import Optional
 
+global TOOT_LENGTH
 TOOT_LENGTH = 500
-ACCESS_TOKEN = 'q9Z_ed37jjn7FBfZ0tk27uL8q6z0HpPPGfgQVr6nI1Y'
-SERVER = 'mastodon.social'
 
 @dataclass
 class Poll:
@@ -178,12 +178,7 @@ def parseToot(fn):
         data = handle.read()
         return Toot.from_text(data)
 
-mastodon = Mastodon(
-    api_base_url=SERVER,
-    access_token=os.environ['FEDI_ACCESS_TOKEN']
-)
-
-def sendToot(toot):
+def sendToot(toot, mastodon):
     in_reply_to_id = None
     for post in toot.split_contents():
         print('=====')
@@ -217,32 +212,48 @@ def sendToot(toot):
         # TODO: support sensitive-media? (well it's handled automatically by CW'ing the post, so, maybe not necessary.)
         # TODO: idempotency_key
 
-def gitMvToot(fn):
+def gitMvToot(fn, args):
     files = subprocess.check_output(['git', 'ls-files']).decode('utf-8').split('\n')
     if fn not in files:
         # File not tracked by git, probably a dev testing locally.
         return None
 
     # Create an outbox if it doesn't exist.
-    os.makedirs("outbox", exist_ok=True)
+    os.makedirs(args.outbox, exist_ok=True)
 
     subprocess.check_call([
         'git', 'mv',
-        fn, fn.replace('inbox', 'outbox')
+        fn, fn.replace(args.inbox, args.outbox)
     ])
 
-for fn in glob.glob("inbox/*"):
-    toot = parseToot(fn)
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(prog='tootit')
+    parser.add_argument('inbox')
+    parser.add_argument('outbox')
+    parser.add_argument('server', help='FQDN only')
+    parser.add_argument('token')
+    parser.add_argument('--toot-length', default=500, type=int)
+    args = parser.parse_args()
 
-    # If there's no date, send now
-    if not toot.date:
-        sendToot(toot)
-        gitMvToot(fn)
+    TOOT_LENGTH = args.toot_length
 
-    # Otherwise, check if we're past that date.
-    now = datetime.datetime.now(tz=pytz.UTC)
-    if toot.date < now:
-        sendToot(toot)
-        gitMvToot(fn)
+    mastodon = Mastodon(
+        api_base_url=args.server,
+        access_token=os.environ['FEDI_ACCESS_TOKEN']
+    )
 
-    # Otherwise we can ignore it for now.
+    for fn in glob.glob(os.path.join(args.inbox, '*')):
+        toot = parseToot(fn)
+
+        # If there's no date, send now
+        if not toot.date:
+            sendToot(toot, mastodon)
+            gitMvToot(fn, args)
+
+        # Otherwise, check if we're past that date.
+        now = datetime.datetime.now(tz=pytz.UTC)
+        if toot.date < now:
+            sendToot(toot, mastodon)
+            gitMvToot(fn, args)
+
+        # Otherwise we can ignore it for now.

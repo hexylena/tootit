@@ -1,0 +1,29 @@
+# action.yml
+name: 'Toot It'
+description: 'Send any unsent toots from a specified inbox'
+inputs:
+  inbox:
+    description: 'Path to a folder of markdown documents to toot'
+    required: true
+    default: 'inbox'
+  outbox:
+    description: 'Where would you like these documents saved'
+    required: true
+    default: 'outbox'
+  server:
+    description: 'Server name (e.g. mastodon.social)'
+    required: true
+    default: 'mstdn.science'
+  toot_length:
+    description: 'Maximum characters in your servers toots'
+    required: true
+    default: '500'
+  token:
+    description: 'Access token token (you must create your own app to toot as you.)'
+    required: true
+    default: 'not-a-real-token'
+runs:
+  using: 'docker'
+  image: 'Dockerfile'
+  args:
+    - ${{ inputs.inbox }} ${{ inputs.outbox }} ${{ inputs.server }} ${{ inputs.token }} --toot-length ${{ inputs.toot_length }}
