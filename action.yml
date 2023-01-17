@@ -22,8 +22,11 @@ inputs:
     description: 'Access token token (you must create your own app to toot as you.)'
     required: true
     default: 'not-a-real-token'
+  file:
+    description: 'Toot a specific markdown document (will ignore inbox/outbox)'
+    required: false
 runs:
   using: 'docker'
   image: 'Dockerfile'
   args:
-    - ${{ inputs.inbox }} ${{ inputs.outbox }} ${{ inputs.server }} ${{ inputs.token }} --toot-length ${{ inputs.toot_length }}
+    - ${{ inputs.inbox }} ${{ inputs.outbox }} ${{ inputs.server }} ${{ inputs.token }} ${{ inputs.file }} --toot-length ${{ inputs.toot_length }}

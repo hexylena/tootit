@@ -232,6 +232,7 @@ if __name__ == '__main__':
     parser.add_argument('outbox')
     parser.add_argument('server', help='FQDN only')
     parser.add_argument('token')
+    parser.add_argument('file', nargs='*', help="toot a specific md, if specified, rather than discovering from the inbox")
     parser.add_argument('--toot-length', default=500, type=int)
     args = parser.parse_args()
 
@@ -242,7 +243,13 @@ if __name__ == '__main__':
         access_token=os.environ['FEDI_ACCESS_TOKEN']
     )
 
-    for fn in glob.glob(os.path.join(args.inbox, '*')):
+    files = []
+    if len(args.file) > 0:
+        files = args.file
+    else:
+        files = glob.glob(os.path.join(args.inbox, '*'))
+
+    for fn in files:
         toot = parseToot(fn)
 
         # If there's no date, send now
