@@ -25,6 +25,7 @@ inputs:
   file:
     description: 'Toot a specific markdown document (will ignore inbox/outbox)'
     required: false
+    default: does-not-exist.md
   visibility:
     description: 'Set the visibility for a toot (only if using file to toot a specific file.)'
     required: true
