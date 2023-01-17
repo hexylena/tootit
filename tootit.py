@@ -231,7 +231,7 @@ if __name__ == '__main__':
     parser.add_argument('inbox')
     parser.add_argument('outbox')
     parser.add_argument('server', help='FQDN only')
-    parser.add_argument('token')
+    parser.add_argument('token', default=os.environ.get('FEDI_ACCESS_TOKEN', ''))
     parser.add_argument('file', nargs='*', help="toot a specific md, if specified, rather than discovering from the inbox")
     parser.add_argument('--toot-length', default=500, type=int)
     #parser.add_argument('--visibility', default='private', choices=['public', 'private'], type=str, help="Only really relevant when tooting from md.")
@@ -241,7 +241,7 @@ if __name__ == '__main__':
 
     mastodon = Mastodon(
         api_base_url=args.server,
-        access_token=os.environ['FEDI_ACCESS_TOKEN']
+        access_token=args.token
     )
 
     files = []
