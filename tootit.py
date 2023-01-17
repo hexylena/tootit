@@ -100,7 +100,7 @@ class Toot:
     language: str = "en"
     date: str = None
     cw: str = None
-    visibility: str = "public" # One of "direct", "private", "public"
+    visibility: str = "private" # One of "direct", "private", "public"
     auto_thread_emoji: bool = True
 
     @classmethod
@@ -234,6 +234,7 @@ if __name__ == '__main__':
     parser.add_argument('token')
     parser.add_argument('file', nargs='*', help="toot a specific md, if specified, rather than discovering from the inbox")
     parser.add_argument('--toot-length', default=500, type=int)
+    #parser.add_argument('--visibility', default='private', choices=['public', 'private'], type=str, help="Only really relevant when tooting from md.")
     args = parser.parse_args()
 
     TOOT_LENGTH = args.toot_length
