@@ -1,4 +1,6 @@
-on: [push]
+on:
+  push:
+    branches: [main]
 
 jobs:
   hello_world_job:
@@ -9,9 +11,12 @@ jobs:
       # you must check out the repository
       - name: Checkout
         uses: actions/checkout@v3
+      - name: "Write out update"
+        run: |
+          echo "TootIt was updated @hexylena@tech.lgbt!" > toot.md
       - name: Test sending a toot
         uses: ./ # Uses an action in the root directory
         with:
           server: mastodon.social
           token: ${{ secrets.mastodon_social }}
-          file: README.md
+          file: toot.md
