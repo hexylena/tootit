@@ -246,9 +246,8 @@ if __name__ == '__main__':
     )
 
     if args.file != 'does-not-exist.md':
-        for fn in args.file:
-            toot = parseToot(fn)
-            sendToot(toot, mastodon, visibility=args.visibility)
+        toot = parseToot(args.file)
+        sendToot(toot, mastodon, visibility=args.visibility)
     else:
         for fn in glob.glob(os.path.join(args.inbox, '*')):
             toot = parseToot(fn)

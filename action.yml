@@ -38,6 +38,9 @@ runs:
     - ${{ inputs.outbox }}
     - ${{ inputs.server }}
     - ${{ inputs.token }}
-    - --file ${{ inputs.file }}
-    - --toot-length ${{ inputs.toot_length }}
-    - --visibility ${{ inputs.visibility }}
+    - --file
+    - ${{ inputs.file }}
+    - --toot-length
+    - ${{ inputs.toot_length }}
+    - --visibility 
+    - ${{ inputs.visibility }}
