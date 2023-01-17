@@ -13,7 +13,9 @@ jobs:
         uses: actions/checkout@v3
       - name: "Write out update"
         run: |
-          echo "TootIt was updated @hexylena@tech.lgbt!" > toot.md
+          echo "TootIt was updated" > toot.md
+          git log | head -n 5 >> toot.md
+          echo "fyi @hexylena@tech.lgbt" >> toot.md
       - name: Test sending a toot
         uses: ./ # Uses an action in the root directory
         with:
