@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 # Identify posts that should be posted
+
 import argparse
 import requests
 from mastodon import Mastodon
@@ -8,6 +9,7 @@ import subprocess
 import time
 import base64
 import os
+import shutil
 import glob
 import re
 import yaml
@@ -220,19 +222,10 @@ def sendToot(toot, mastodon, visibility=None):
         # TODO: support sensitive-media? (well it's handled automatically by CW'ing the post, so, maybe not necessary.)
         # TODO: idempotency_key
 
-def gitMvToot(fn, args):
-    files = subprocess.check_output(['git', 'ls-files']).decode('utf-8').split('\n')
-    if fn not in files:
-        # File not tracked by git, probably a dev testing locally.
-        return None
-
+def move_to_outbox(fn, args):
     # Create an outbox if it doesn't exist.
     os.makedirs(args.outbox, exist_ok=True)
-
-    subprocess.check_call([
-        'git', 'mv',
-        fn, fn.replace(args.inbox, args.outbox)
-    ])
+    shutil.move(fn, args.outbox)
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='tootit')
@@ -242,7 +235,7 @@ if __name__ == '__main__':
     parser.add_argument('token', default=os.environ.get('FEDI_ACCESS_TOKEN', ''))
     parser.add_argument('file', nargs='*', help="toot a specific md, if specified, rather than discovering from the inbox")
     parser.add_argument('--toot-length', default=500, type=int)
-    parser.add_argument('--visibility', default='private', choices=['public', 'private'], type=str, help="Only really relevant when tooting from md.")
+    parser.add_argument('--visibility', default='private', choices=['public', 'private', 'unlisted', 'direct'], type=str, help="Only really relevant when tooting from md.")
     args = parser.parse_args()
 
     TOOT_LENGTH = args.toot_length
@@ -264,12 +257,12 @@ if __name__ == '__main__':
             # If there's no date, send now
             if not toot.date:
                 sendToot(toot, mastodon)
-                gitMvToot(fn, args)
+                move_to_outbox(fn, args)
 
             # Otherwise, check if we're past that date.
             now = datetime.datetime.now(tz=pytz.UTC)
             if toot.date < now:
                 sendToot(toot, mastodon)
-                gitMvToot(fn, args)
+                move_to_outbox(fn, args)
 
             # Otherwise we can ignore it for now.

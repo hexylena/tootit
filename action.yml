@@ -25,6 +25,10 @@ inputs:
   file:
     description: 'Toot a specific markdown document (will ignore inbox/outbox)'
     required: false
+  visibility:
+    description: 'Set the visibility for a toot (only if using file to toot a specific file.)'
+    required: true
+    default: 'private'
 runs:
   using: 'docker'
   image: 'Dockerfile'
@@ -35,3 +39,4 @@ runs:
     - ${{ inputs.token }}
     - ${{ inputs.file }}
     - --toot-length ${{ inputs.toot_length }}
+    - --visibility ${{ inputs.visibility }}
