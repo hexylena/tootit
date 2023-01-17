@@ -29,4 +29,9 @@ runs:
   using: 'docker'
   image: 'Dockerfile'
   args:
-    - ${{ inputs.inbox }} ${{ inputs.outbox }} ${{ inputs.server }} ${{ inputs.token }} ${{ inputs.file }} --toot-length ${{ inputs.toot_length }}
+    - ${{ inputs.inbox }}
+    - ${{ inputs.outbox }}
+    - ${{ inputs.server }}
+    - ${{ inputs.token }}
+    - ${{ inputs.file }}
+    - --toot-length ${{ inputs.toot_length }}
