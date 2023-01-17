@@ -1,8 +1,9 @@
 # action.yml
 name: 'Toot It'
 description: 'Send any unsent toots from a specified inbox'
-icon: send
-color: blue
+branding:
+  icon: send
+  color: blue
 inputs:
   inbox:
     description: 'Path to a folder of markdown documents to toot'
